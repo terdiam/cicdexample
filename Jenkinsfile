@@ -269,6 +269,24 @@ CMD ["/app/.output/server/index.mjs"]
                 kubectl create namespace ${NAME_SPACE} --dry-run=client -o yaml \
                   --kubeconfig=$KUBECONFIG | kubectl apply -f - --kubeconfig=$KUBECONFIG
               '''
+
+              // Registry pull secret — idempotent
+              withCredentials([usernamePassword(
+                credentialsId: REGISTRY_CRED,
+                usernameVariable: 'REG_USER',
+                passwordVariable: 'REG_PASS'
+              )]) {
+                sh '''
+                  kubectl create secret docker-registry ${IMAGE_NAME}-registry \
+                    --docker-server=$REGISTRY_URL \
+                    --docker-username=$REG_USER \
+                    --docker-password=$REG_PASS \
+                    --namespace=${NAME_SPACE} \
+                    --kubeconfig=$KUBECONFIG \
+                    --dry-run=client -o yaml | kubectl apply -f - --kubeconfig=$KUBECONFIG
+                '''
+              }
+
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
 apiVersion: v1
@@ -302,6 +320,8 @@ spec:
         app: ci-cd-example
         version: ${IMAGE_VERSION}
     spec:
+      imagePullSecrets:
+      - name: ci-cd-example-registry
       containers:
       - name: ci-cd-example
         image: quantumteknologi/ci-cd-example:${IMAGE_VERSION}
@@ -339,6 +359,23 @@ YAML
               '''
             } else {
               echo "Deployment exists — skipping bootstrap"
+
+              // Keep registry pull secret up-to-date on re-deploys
+              withCredentials([usernamePassword(
+                credentialsId: REGISTRY_CRED,
+                usernameVariable: 'REG_USER',
+                passwordVariable: 'REG_PASS'
+              )]) {
+                sh '''
+                  kubectl create secret docker-registry ${IMAGE_NAME}-registry \
+                    --docker-server=$REGISTRY_URL \
+                    --docker-username=$REG_USER \
+                    --docker-password=$REG_PASS \
+                    --namespace=${NAME_SPACE} \
+                    --kubeconfig=$KUBECONFIG \
+                    --dry-run=client -o yaml | kubectl apply -f - --kubeconfig=$KUBECONFIG
+                '''
+              }
             }
           }
         }
