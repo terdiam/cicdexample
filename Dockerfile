@@ -1,10 +1,11 @@
 # ── Build stage ──────────────────────────────────────────────
 FROM node:24-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@latest --activate
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm build
+RUN pnpm run build
 
 # ── Runtime stage (distroless) ────────────────────────────────
 FROM gcr.io/distroless/nodejs24-debian13 AS runner
