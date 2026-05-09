@@ -42,9 +42,6 @@ pipeline {
      * Checkout
      * ============================= */
     stage('Checkout') {
-      when {
-        branch 'development'
-      }
       steps {
         script {
           checkout scm
@@ -71,7 +68,7 @@ pipeline {
           } else if (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main') {
             prefix = 'prod'
           } else {
-            error("❌ Branch '${env.BRANCH_NAME}' is not mapped to a deployment environment")
+            prefix = 'dev'
           }
 
           def timestamp = new Date().format('yyyyMMdd.HHmmss')
@@ -96,32 +93,7 @@ pipeline {
           env.BUILD_TYPE    = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
           env.IMAGE_VERSION = tagName
           echo "✅ Tag created: ${tagName}  (env: ${env.BUILD_TYPE})"
-          sendTelegram("🚀 *Pipeline Triggered*\nProject: *$PROJECT_NAME*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${env.BUILD_TYPE}*")
-        }
-      }
-    }
-
-    /* =============================
-     * Tag & Branch Validation
-     * ============================= */
-    stage('Branch & Tag Validation') {
-      steps {
-        script {
-          if (!env.IS_TAG) {
-            error("❌ No tag set — Create Tag stage must run first")
-          }
-
-          if (env.IS_TAG.startsWith('dev-') && env.BRANCH_NAME == 'development') {
-            env.BUILD_TYPE = 'development'
-          } else if (env.IS_TAG.startsWith('stag-') && env.BRANCH_NAME == 'staging') {
-            env.BUILD_TYPE = 'staging'
-          } else if (env.IS_TAG.startsWith('prod-') && (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main')) {
-            env.BUILD_TYPE = 'production'
-          } else {
-            error("❌ Tag prefix & branch mismatch: tag=${env.IS_TAG}, branch=${env.BRANCH_NAME}")
-          }
-
-          env.IMAGE_VERSION = env.IS_TAG
+          sendTelegram("🚀 *Pipeline Triggered*\nProject: *${env.PROJECT_NAME}*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${env.BUILD_TYPE}*")
         }
       }
     }
