@@ -191,7 +191,7 @@ pipeline {
     stage('Trivy Security Scan') {
       steps {
         script {
-          def severity = (BUILD_TYPE == 'development') ? 'CRITICAL' : 'CRITICAL'
+          def severity = (BUILD_TYPE == 'development') ? 'CRITICAL' : 'HIGH,CRITICAL'
           sh """
             trivy fs \
               --severity ${severity} \
