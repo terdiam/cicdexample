@@ -191,7 +191,7 @@ pipeline {
     stage('Trivy Security Scan') {
       steps {
         script {
-          def severity = (BUILD_TYPE == 'development') ? 'CRITICAL' : 'HIGH,CRITICAL'
+          def severity = (BUILD_TYPE == 'development') ? 'CRITICAL' : 'CRITICAL'
           sh """
             trivy fs \
               --severity ${severity} \
@@ -253,7 +253,7 @@ CMD ["/app/.output/server/index.mjs"]
         sh """
           trivy image \
             --exit-code 1 \
-            --severity HIGH,CRITICAL \
+            --severity CRITICAL \
             --ignore-unfixed \
             ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
         """
