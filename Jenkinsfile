@@ -21,6 +21,7 @@ pipeline {
     BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
 
     KUBECONFIG_CRED   = 'kubeconfig-dev-rancher'
+    GIT_CRED_ID       = 'idp-development-cred'
     IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/'
   }
 
@@ -52,7 +53,8 @@ pipeline {
     /* =============================
      * Create Tag
      * Auto-generates a versioned tag (dev-/stag-/prod- prefix) and pushes it
-     * to the remote so downstream stages can detect it via git describe.
+     * to the remote using the same SCM credential so downstream stages can
+     * detect it via git describe.
      * ============================= */
     stage('Create Tag') {
       steps {
@@ -72,15 +74,22 @@ pipeline {
           def shortSha  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
           def tagName   = "${prefix}-${timestamp}-${shortSha}"
 
-          sh """
-            git config user.email "jenkins@idp.local"
-            git config user.name  "Jenkins IDP"
-            git tag -a ${tagName} -m "IDP automated release: ${tagName}"
-            git push origin ${tagName}
-          """
+          // Use the SCM credential so git push works on HTTPS remotes.
+          withCredentials([usernamePassword(
+            credentialsId: env.GIT_CRED_ID,
+            usernameVariable: 'GIT_USER',
+            passwordVariable: 'GIT_TOKEN'
+          )]) {
+            sh """
+              git config user.email "jenkins@idp.local"
+              git config user.name  "Jenkins IDP"
+              git tag -a ${tagName} -m "IDP automated release: ${tagName}"
+              git push https://\${GIT_USER}:\${GIT_TOKEN}@\$(git remote get-url origin | sed 's|https://[^@]*@||' | sed 's|https://||') refs/tags/${tagName}
+            """
+          }
 
-          IS_TAG     = tagName
-          BUILD_TYPE = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
+          IS_TAG        = tagName
+          BUILD_TYPE    = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
           IMAGE_VERSION = tagName
           echo "✅ Tag created: ${tagName}  (env: ${BUILD_TYPE})"
           sendTelegram("🚀 *Pipeline Triggered*\nProject: *$PROJECT_NAME*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${BUILD_TYPE}*")
