@@ -1,6 +1,7 @@
 def IS_TAG = ''
 def BUILD_TYPE = ''
 def IMAGE_VERSION = ''
+def COMMIT_SHA = ''
 def NAME_SPACE = 'ptpn'
 
 pipeline {
@@ -45,8 +46,11 @@ pipeline {
         branch 'development'
       }
       steps {
-        checkout scm
-        echo "Branch: ${env.BRANCH_NAME}"
+        script {
+          checkout scm
+          COMMIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+          echo "Branch: ${env.BRANCH_NAME}  Commit: ${COMMIT_SHA}"
+        }
       }
     }
 
@@ -392,10 +396,13 @@ YAML
     }
     always {
       script {
-        def buildStatus   = currentBuild.result ?: 'SUCCESS'
-        def startedAtSec  = currentBuild.startTimeInMillis.intdiv(1000)
-        def durationMs    = currentBuild.duration
-        def commitMsg     = currentBuild.description ?: ''
+        def buildStatus  = currentBuild.result ?: 'SUCCESS'
+        def startedAtSec = currentBuild.startTimeInMillis.intdiv(1000)
+        def durationMs   = currentBuild.duration
+        def commitMsg    = currentBuild.description ?: ''
+        // COMMIT_SHA is set by the Checkout stage; fall back to empty string if
+        // the stage was skipped (e.g. wrong branch) so the webhook still fires.
+        def sha = COMMIT_SHA ?: ''
 
         sh """
           curl -s -X POST '${IDP_WEBHOOK_URL}' \\
@@ -407,7 +414,7 @@ YAML
               "started_at":      ${startedAtSec},
               "duration_ms":     ${durationMs},
               "triggered_by":    "SCM",
-              "commit_sha":      "${GIT_COMMIT}",
+              "commit_sha":      "${sha}",
               "commit_message":  "${commitMsg}"
             }' || true
         """
