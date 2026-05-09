@@ -390,10 +390,10 @@ YAML
 
   post {
     success {
-      sendTelegram("✅ *DEPLOY SUCCESS*\nProject: $PROJECT_NAME\nEnv: $BUILD_TYPE\nTag: $IMAGE_VERSION")
+      sendTelegram("✅ *DEPLOY SUCCESS*\nProject: ${env.PROJECT_NAME}\nEnv: ${env.BUILD_TYPE}\nTag: ${env.IMAGE_VERSION}")
     }
     failure {
-      sendTelegram("❌ *DEPLOY FAILED*\nProject: $PROJECT_NAME\nEnv: $BUILD_TYPE\nTag: $IMAGE_VERSION")
+      sendTelegram("❌ *DEPLOY FAILED*\nProject: ${env.PROJECT_NAME}\nEnv: ${env.BUILD_TYPE}\nTag: ${env.IMAGE_VERSION}")
     }
     always {
       script {
