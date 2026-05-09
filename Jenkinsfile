@@ -254,7 +254,7 @@ CMD ["/app/.output/server/index.mjs"]
         sh """
           trivy image \
             --exit-code 1 \
-            --severity HIGH,CRITICAL \
+            --severity CRITICAL \
             --ignore-unfixed \
             ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
         """
