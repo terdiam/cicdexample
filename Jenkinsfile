@@ -282,7 +282,7 @@ CMD ["/app/.output/server/index.mjs"]
         withCredentials([file(credentialsId: KUBECONFIG_CRED, variable: 'KUBECONFIG')]) {
           script {
             def exists = sh(
-              script: "kubectl get deployment/${IMAGE_NAME} -n ${NAME_SPACE} --ignore-not-found --kubeconfig=${KUBECONFIG}",
+              script: 'kubectl get deployment/${IMAGE_NAME} -n ${NAME_SPACE} --ignore-not-found --kubeconfig=$KUBECONFIG',
               returnStdout: true
             ).trim()
 
@@ -290,12 +290,12 @@ CMD ["/app/.output/server/index.mjs"]
               echo "Deployment not found — bootstrapping K8s resources for namespace ${NAME_SPACE}"
 
               // Namespace
-              sh """
+              sh '''
                 kubectl create namespace ${NAME_SPACE} --dry-run=client -o yaml \
-                  --kubeconfig=${KUBECONFIG} | kubectl apply -f - --kubeconfig=${KUBECONFIG}
-              """
-              sh """
-                kubectl apply -f - --kubeconfig=${KUBECONFIG} <<'YAML'
+                  --kubeconfig=$KUBECONFIG | kubectl apply -f - --kubeconfig=$KUBECONFIG
+              '''
+              sh '''
+                kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -304,10 +304,10 @@ metadata:
 data:
     NUXT_PUBLIC_URL: "https://localhost:3000"
 YAML
-              """
+              '''
               echo "No Secret variables — skipping"
-              sh """
-                kubectl apply -f - --kubeconfig=${KUBECONFIG} <<YAML
+              sh '''
+                kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -333,9 +333,9 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
-      envFrom:
-        - configMapRef:
-            name: ci-cd-example-config
+        envFrom:
+          - configMapRef:
+              name: ci-cd-example-config
         resources:
           requests:
             cpu: "100m"
@@ -344,9 +344,9 @@ spec:
             cpu: "500m"
             memory: "512Mi"
 YAML
-              """
-              sh """
-                kubectl apply -f - --kubeconfig=${KUBECONFIG} <<YAML
+              '''
+              sh '''
+                kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -361,7 +361,7 @@ spec:
     targetPort: 3000
   type: ClusterIP
 YAML
-              """
+              '''
             } else {
               echo "Deployment exists — skipping bootstrap"
             }
@@ -376,13 +376,13 @@ YAML
     stage('Deploy to Kubernetes') {
       steps {
         withCredentials([file(credentialsId: KUBECONFIG_CRED, variable: 'KUBECONFIG')]) {
-          sh """
-            export KUBECONFIG=${KUBECONFIG}
+          sh '''
+            export KUBECONFIG=$KUBECONFIG
             kubectl set image deployment/${IMAGE_NAME} \
               ${IMAGE_NAME}=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} \
               -n ${NAME_SPACE}
             kubectl rollout status deployment/${IMAGE_NAME} -n ${NAME_SPACE} --timeout=180s
-          """
+          '''
         }
       }
     }
