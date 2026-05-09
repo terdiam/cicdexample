@@ -1,8 +1,4 @@
-def IS_TAG = ''
-def BUILD_TYPE = ''
-def IMAGE_VERSION = ''
 def COMMIT_SHA = ''
-def NAME_SPACE = 'ptpn'
 
 pipeline {
   agent any
@@ -10,7 +6,11 @@ pipeline {
   environment {
     IMAGE_NAME        = 'ci-cd-example'
     PROJECT_NAME      = 'ptpn'
+    NAME_SPACE        = 'ptpn'
     REGISTRY          = 'quantumteknologi'
+    IS_TAG            = ''
+    BUILD_TYPE        = ''
+    IMAGE_VERSION     = ''
 
     REGISTRY_CRED         = 'registry-docker'
     REGISTRY_URL          = 'https://index.docker.io/v1/'
@@ -92,11 +92,11 @@ pipeline {
             """
           }
 
-          IS_TAG        = tagName
-          BUILD_TYPE    = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
-          IMAGE_VERSION = tagName
-          echo "✅ Tag created: ${tagName}  (env: ${BUILD_TYPE})"
-          sendTelegram("🚀 *Pipeline Triggered*\nProject: *$PROJECT_NAME*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${BUILD_TYPE}*")
+          env.IS_TAG        = tagName
+          env.BUILD_TYPE    = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
+          env.IMAGE_VERSION = tagName
+          echo "✅ Tag created: ${tagName}  (env: ${env.BUILD_TYPE})"
+          sendTelegram("🚀 *Pipeline Triggered*\nProject: *$PROJECT_NAME*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${env.BUILD_TYPE}*")
         }
       }
     }
@@ -107,21 +107,21 @@ pipeline {
     stage('Branch & Tag Validation') {
       steps {
         script {
-          if (!IS_TAG) {
+          if (!env.IS_TAG) {
             error("❌ No tag set — Create Tag stage must run first")
           }
 
-          if (IS_TAG.startsWith('dev-') && env.BRANCH_NAME == 'development') {
-            BUILD_TYPE = 'development'
-          } else if (IS_TAG.startsWith('stag-') && env.BRANCH_NAME == 'staging') {
-            BUILD_TYPE = 'staging'
-          } else if (IS_TAG.startsWith('prod-') && (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main')) {
-            BUILD_TYPE = 'production'
+          if (env.IS_TAG.startsWith('dev-') && env.BRANCH_NAME == 'development') {
+            env.BUILD_TYPE = 'development'
+          } else if (env.IS_TAG.startsWith('stag-') && env.BRANCH_NAME == 'staging') {
+            env.BUILD_TYPE = 'staging'
+          } else if (env.IS_TAG.startsWith('prod-') && (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main')) {
+            env.BUILD_TYPE = 'production'
           } else {
-            error("❌ Tag prefix & branch mismatch: tag=${IS_TAG}, branch=${env.BRANCH_NAME}")
+            error("❌ Tag prefix & branch mismatch: tag=${env.IS_TAG}, branch=${env.BRANCH_NAME}")
           }
 
-          IMAGE_VERSION = IS_TAG
+          env.IMAGE_VERSION = env.IS_TAG
         }
       }
     }
@@ -132,7 +132,7 @@ pipeline {
     stage('Inject Environment') {
       steps {
         script {
-          def envCredID = "env-${BUILD_TYPE}"
+          def envCredID = "env-${env.BUILD_TYPE}"
           try {
             withCredentials([file(credentialsId: envCredID, variable: 'ENV_FILE')]) {
               sh 'cp $ENV_FILE .env'
