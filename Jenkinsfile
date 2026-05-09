@@ -41,16 +41,50 @@ pipeline {
      * ============================= */
     stage('Checkout') {
       when {
-        anyOf {
-          branch 'master'
-          branch 'main'
-          branch 'staging'
-          branch 'development'
-        }
+        branch 'development'
       }
       steps {
         checkout scm
         echo "Branch: ${env.BRANCH_NAME}"
+      }
+    }
+
+    /* =============================
+     * Create Tag
+     * Auto-generates a versioned tag (dev-/stag-/prod- prefix) and pushes it
+     * to the remote so downstream stages can detect it via git describe.
+     * ============================= */
+    stage('Create Tag') {
+      steps {
+        script {
+          def prefix = ''
+          if (env.BRANCH_NAME == 'development') {
+            prefix = 'dev'
+          } else if (env.BRANCH_NAME == 'staging') {
+            prefix = 'stag'
+          } else if (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main') {
+            prefix = 'prod'
+          } else {
+            error("❌ Branch '${env.BRANCH_NAME}' is not mapped to a deployment environment")
+          }
+
+          def timestamp = new Date().format('yyyyMMdd.HHmmss')
+          def shortSha  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          def tagName   = "${prefix}-${timestamp}-${shortSha}"
+
+          sh """
+            git config user.email "jenkins@idp.local"
+            git config user.name  "Jenkins IDP"
+            git tag -a ${tagName} -m "IDP automated release: ${tagName}"
+            git push origin ${tagName}
+          """
+
+          IS_TAG     = tagName
+          BUILD_TYPE = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
+          IMAGE_VERSION = tagName
+          echo "✅ Tag created: ${tagName}  (env: ${BUILD_TYPE})"
+          sendTelegram("🚀 *Pipeline Triggered*\nProject: *$PROJECT_NAME*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${BUILD_TYPE}*")
+        }
       }
     }
 
@@ -60,15 +94,8 @@ pipeline {
     stage('Branch & Tag Validation') {
       steps {
         script {
-          sh 'git fetch --tags'
-
-          IS_TAG = sh(
-            script: "git describe --exact-match --tags || echo ''",
-            returnStdout: true
-          ).trim()
-
           if (!IS_TAG) {
-            error("❌ Build must be triggered by TAG")
+            error("❌ No tag set — Create Tag stage must run first")
           }
 
           if (IS_TAG.startsWith('dev-') && env.BRANCH_NAME == 'development') {
@@ -78,11 +105,10 @@ pipeline {
           } else if (IS_TAG.startsWith('prod-') && (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main')) {
             BUILD_TYPE = 'production'
           } else {
-            error("❌ Tag prefix & branch mismatch")
+            error("❌ Tag prefix & branch mismatch: tag=${IS_TAG}, branch=${env.BRANCH_NAME}")
           }
 
           IMAGE_VERSION = IS_TAG
-          sendTelegram("🚀 *Pipeline Triggered*\nProject: *$PROJECT_NAME*\nBranch: *${env.BRANCH_NAME}*\nTag: *$IS_TAG*\nEnv: *$BUILD_TYPE*")
         }
       }
     }
