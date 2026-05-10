@@ -45,6 +45,9 @@ pipeline {
       steps {
         script {
           checkout scm
+          // Multibranch checkout often omits tags; IDP creates tags on GitHub — fetch them first.
+          sh 'git fetch --tags origin 2>/dev/null || git fetch --tags 2>/dev/null || true'
+
           COMMIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
 
           def prefix = ''
@@ -60,22 +63,34 @@ pipeline {
 
           BUILD_TYPE = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
 
-          // Release tags are created by IDP (POST /cicd/wizard/push-jenkinsfile), not inside Jenkins.
+          // Prefer the same release tag IDP pushed (dev-|stag-|prod-...). Never use bare git describe --always
+          // when it resolves to only a short SHA — that caused Docker/K8s to tag images as "5548bfb" instead of the full tag.
           def exactTag = sh(script: 'git describe --tags --exact-match HEAD 2>/dev/null || true', returnStdout: true).trim()
+          def idpTag = sh(script: 'git tag -l --points-at HEAD | grep -E "^(dev|stag|prod)-" | head -1', returnStdout: true).trim()
           def describeOut = sh(script: 'git describe --tags --always 2>/dev/null || true', returnStdout: true).trim()
+
+          def isHexOnly = { s -> s && (s ==~ /^[0-9a-fA-F]{7,40}$/) }
+          def isIdpReleaseName = { s ->
+            s && (s.startsWith('dev-') || s.startsWith('stag-') || s.startsWith('prod-'))
+          }
+
+          def imageVer = ''
           if (exactTag) {
-            IS_TAG = exactTag
-            IMAGE_VERSION = exactTag
-          } else if (describeOut && !describeOut.startsWith('g')) {
-            IS_TAG = describeOut
-            IMAGE_VERSION = describeOut
+            imageVer = exactTag
+          } else if (idpTag) {
+            imageVer = idpTag
+          } else if (isIdpReleaseName(describeOut)) {
+            imageVer = describeOut
+          } else if (describeOut && !isHexOnly(describeOut) && !describeOut.startsWith('g')) {
+            imageVer = describeOut
           } else {
             def timestamp = new Date().format('yyyyMMdd.HHmmss')
             def shortSha  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-            IMAGE_VERSION = "${prefix}-${timestamp}-${shortSha}"
-            IS_TAG = IMAGE_VERSION
+            imageVer = "${prefix}-${timestamp}-${shortSha}"
           }
 
+          IS_TAG = imageVer
+          IMAGE_VERSION = imageVer
           env.IS_TAG = IS_TAG
           env.BUILD_TYPE = BUILD_TYPE
           env.IMAGE_VERSION = IMAGE_VERSION
@@ -233,7 +248,7 @@ CMD ["/app/.output/server/index.mjs"]
         sh """
           trivy image \
             --exit-code 1 \
-            --severity CRITICAL \
+            --severity HIGH,CRITICAL \
             --ignore-unfixed \
             ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
         """
