@@ -22,7 +22,7 @@ pipeline {
     BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
 
     KUBECONFIG_CRED   = 'kubeconfig-dev-rancher'
-    GIT_CRED_ID       = 'idp-development-cred'
+    GIT_CRED_ID       = 'ptpn-cred'
     IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/'
   }
 
@@ -249,7 +249,7 @@ CMD ["/app/.output/server/index.mjs"]
         sh """
           trivy image \
             --exit-code 1 \
-            --severity CRITICAL \
+            --severity HIGH,CRITICAL \
             --ignore-unfixed \
             ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
         """
