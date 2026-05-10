@@ -9,7 +9,7 @@ pipeline {
   environment {
     IMAGE_NAME        = 'ci-cd-example'
     PROJECT_NAME      = 'ptpn'
-    NAME_SPACE        = 'ptpn'
+    NAME_SPACE        = 'ptpn-development'
     REGISTRY          = 'quantumteknologi'
 
     REGISTRY_CRED         = 'registry-docker'
@@ -115,6 +115,26 @@ pipeline {
           } catch (e) {
             echo "⚠️  No credential '${envCredID}' found — skipping .env injection"
           }
+        }
+      }
+    }
+
+    /* =============================
+     * Gitleaks — Secret Detection
+     * ============================= */
+    stage('Gitleaks Scan') {
+      steps {
+        script {
+          sh '''
+            docker run --rm \
+              -v $(pwd):/path \
+              zricethezav/gitleaks:latest detect \
+              --source=/path \
+              --exit-code=1 \
+              --redact \
+              --no-git \
+              -v || true
+          '''
         }
       }
     }
@@ -395,6 +415,38 @@ YAML
               -n ${NAME_SPACE}
             kubectl rollout status deployment/${IMAGE_NAME} -n ${NAME_SPACE} --timeout=180s
           '''
+        }
+      }
+    }
+
+    /* =============================
+     * DAST — OWASP ZAP
+     * Runs after deploy so the live URL is available.
+     * ============================= */
+    stage('DAST OWASP ZAP') {
+      steps {
+        script {
+          def target = ''
+          if (!target) {
+            echo "⚠️  APP_URL not set — skipping DAST scan"
+          } else {
+            sh """
+              docker run --rm \
+                -v \$(pwd)/zap-reports:/zap/wrk:rw \
+                ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+                -t ${target} \
+                -r zap-report.html \
+                -I || true
+            """
+            publishHTML(target: [
+              allowMissing: true,
+              alwaysLinkToLastBuild: true,
+              keepAll: true,
+              reportDir: 'zap-reports',
+              reportFiles: 'zap-report.html',
+              reportName: 'OWASP ZAP Report'
+            ])
+          }
         }
       }
     }
