@@ -268,45 +268,36 @@ CMD ["/app/.output/server/index.mjs"]
     }
 
     /* =============================
-     * K8s Bootstrap
-     * Check if Deployment exists; if not, create Namespace, ConfigMap,
-     * Secret, Deployment and Service from scratch.
+     * Deploy to Kubernetes
+     * Bootstrap on first deploy, rolling update on subsequent deploys.
      * ============================= */
-    stage('K8s Bootstrap') {
+    stage('Deploy to Kubernetes') {
       steps {
-        withCredentials([file(credentialsId: KUBECONFIG_CRED, variable: 'KUBECONFIG')]) {
+        withCredentials([
+          file(credentialsId: KUBECONFIG_CRED, variable: 'KUBECONFIG'),
+          usernamePassword(credentialsId: REGISTRY_CRED, usernameVariable: 'REG_USER', passwordVariable: 'REG_PASS')
+        ]) {
           script {
+            // Always ensure namespace and registry pull secret exist (idempotent)
+            sh '''
+              kubectl create namespace ${NAME_SPACE} --dry-run=client -o yaml \
+                --kubeconfig=$KUBECONFIG | kubectl apply -f - --kubeconfig=$KUBECONFIG
+              kubectl create secret docker-registry ${IMAGE_NAME}-registry \
+                --docker-server=$REGISTRY_URL \
+                --docker-username=$REG_USER \
+                --docker-password=$REG_PASS \
+                --namespace=${NAME_SPACE} \
+                --kubeconfig=$KUBECONFIG \
+                --dry-run=client -o yaml | kubectl apply -f - --kubeconfig=$KUBECONFIG
+            '''
+
             def exists = sh(
               script: 'kubectl get deployment/${IMAGE_NAME} -n ${NAME_SPACE} --ignore-not-found --kubeconfig=$KUBECONFIG',
               returnStdout: true
             ).trim()
 
             if (!exists) {
-              echo "Deployment not found — bootstrapping K8s resources for namespace ${NAME_SPACE}"
-
-              // Namespace
-              sh '''
-                kubectl create namespace ${NAME_SPACE} --dry-run=client -o yaml \
-                  --kubeconfig=$KUBECONFIG | kubectl apply -f - --kubeconfig=$KUBECONFIG
-              '''
-
-              // Registry pull secret — idempotent
-              withCredentials([usernamePassword(
-                credentialsId: REGISTRY_CRED,
-                usernameVariable: 'REG_USER',
-                passwordVariable: 'REG_PASS'
-              )]) {
-                sh '''
-                  kubectl create secret docker-registry ${IMAGE_NAME}-registry \
-                    --docker-server=$REGISTRY_URL \
-                    --docker-username=$REG_USER \
-                    --docker-password=$REG_PASS \
-                    --namespace=${NAME_SPACE} \
-                    --kubeconfig=$KUBECONFIG \
-                    --dry-run=client -o yaml | kubectl apply -f - --kubeconfig=$KUBECONFIG
-                '''
-              }
-
+              echo "First deploy — creating K8s resources for namespace ${NAME_SPACE}"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
 apiVersion: v1
@@ -378,43 +369,19 @@ spec:
 YAML
               '''
             } else {
-              echo "Deployment exists — skipping bootstrap"
-
-              // Keep registry pull secret up-to-date on re-deploys
-              withCredentials([usernamePassword(
-                credentialsId: REGISTRY_CRED,
-                usernameVariable: 'REG_USER',
-                passwordVariable: 'REG_PASS'
-              )]) {
-                sh '''
-                  kubectl create secret docker-registry ${IMAGE_NAME}-registry \
-                    --docker-server=$REGISTRY_URL \
-                    --docker-username=$REG_USER \
-                    --docker-password=$REG_PASS \
-                    --namespace=${NAME_SPACE} \
-                    --kubeconfig=$KUBECONFIG \
-                    --dry-run=client -o yaml | kubectl apply -f - --kubeconfig=$KUBECONFIG
-                '''
-              }
+              echo "Updating existing deployment — rolling image update"
+              sh '''
+                kubectl set image deployment/${IMAGE_NAME} \
+                  ${IMAGE_NAME}=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} \
+                  -n ${NAME_SPACE} --kubeconfig=$KUBECONFIG
+              '''
             }
-          }
-        }
-      }
-    }
 
-    /* =============================
-     * Deploy to Kubernetes
-     * ============================= */
-    stage('Deploy to Kubernetes') {
-      steps {
-        withCredentials([file(credentialsId: KUBECONFIG_CRED, variable: 'KUBECONFIG')]) {
-          sh '''
-            export KUBECONFIG=$KUBECONFIG
-            kubectl set image deployment/${IMAGE_NAME} \
-              ${IMAGE_NAME}=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} \
-              -n ${NAME_SPACE}
-            kubectl rollout status deployment/${IMAGE_NAME} -n ${NAME_SPACE} --timeout=180s
-          '''
+            sh '''
+              kubectl rollout status deployment/${IMAGE_NAME} -n ${NAME_SPACE} \
+                --timeout=180s --kubeconfig=$KUBECONFIG
+            '''
+          }
         }
       }
     }
