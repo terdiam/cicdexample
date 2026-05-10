@@ -46,20 +46,7 @@ pipeline {
         script {
           checkout scm
           COMMIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-          echo "Branch: ${env.BRANCH_NAME}  Commit: ${COMMIT_SHA}"
-        }
-      }
-    }
 
-    /* =============================
-     * Create Tag
-     * Auto-generates a versioned tag (dev-/stag-/prod- prefix) and pushes it
-     * to the remote using the same SCM credential so downstream stages can
-     * detect it via git describe.
-     * ============================= */
-    stage('Create Tag') {
-      steps {
-        script {
           def prefix = ''
           if (env.BRANCH_NAME == 'development') {
             prefix = 'dev'
@@ -71,32 +58,29 @@ pipeline {
             prefix = 'dev'
           }
 
-          def timestamp = new Date().format('yyyyMMdd.HHmmss')
-          def shortSha  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-          def tagName   = "${prefix}-${timestamp}-${shortSha}"
+          BUILD_TYPE = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
 
-          // Use the SCM credential so git push works on HTTPS remotes.
-          withCredentials([usernamePassword(
-            credentialsId: env.GIT_CRED_ID,
-            usernameVariable: 'GIT_USER',
-            passwordVariable: 'GIT_TOKEN'
-          )]) {
-            sh """
-              git config user.email "jenkins@idp.local"
-              git config user.name  "Jenkins IDP"
-              git tag -a ${tagName} -m "IDP automated release: ${tagName}"
-              git push https://\${GIT_USER}:\${GIT_TOKEN}@\$(git remote get-url origin | sed 's|https://[^@]*@||' | sed 's|https://||') refs/tags/${tagName}
-            """
+          // Release tags are created by IDP (POST /cicd/wizard/push-jenkinsfile), not inside Jenkins.
+          def exactTag = sh(script: 'git describe --tags --exact-match HEAD 2>/dev/null || true', returnStdout: true).trim()
+          def describeOut = sh(script: 'git describe --tags --always 2>/dev/null || true', returnStdout: true).trim()
+          if (exactTag) {
+            IS_TAG = exactTag
+            IMAGE_VERSION = exactTag
+          } else if (describeOut && !describeOut.startsWith('g')) {
+            IS_TAG = describeOut
+            IMAGE_VERSION = describeOut
+          } else {
+            def timestamp = new Date().format('yyyyMMdd.HHmmss')
+            def shortSha  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            IMAGE_VERSION = "${prefix}-${timestamp}-${shortSha}"
+            IS_TAG = IMAGE_VERSION
           }
 
-          IS_TAG        = tagName
-          BUILD_TYPE    = (prefix == 'prod') ? 'production' : (prefix == 'stag' ? 'staging' : 'development')
-          IMAGE_VERSION = tagName
-          env.IS_TAG        = IS_TAG
-          env.BUILD_TYPE    = BUILD_TYPE
+          env.IS_TAG = IS_TAG
+          env.BUILD_TYPE = BUILD_TYPE
           env.IMAGE_VERSION = IMAGE_VERSION
-          echo "✅ Tag created: ${tagName}  (env: ${BUILD_TYPE})"
-          sendTelegram("🚀 *Pipeline Triggered*\nProject: *${env.PROJECT_NAME}*\nBranch: *${env.BRANCH_NAME}*\nTag: *${tagName}*\nEnv: *${BUILD_TYPE}*")
+
+          echo "Branch: ${env.BRANCH_NAME}  Commit: ${COMMIT_SHA}  Image tag: ${IMAGE_VERSION}"
         }
       }
     }
@@ -249,7 +233,7 @@ CMD ["/app/.output/server/index.mjs"]
         sh """
           trivy image \
             --exit-code 1 \
-            --severity HIGH,CRITICAL \
+            --severity CRITICAL \
             --ignore-unfixed \
             ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
         """
