@@ -249,7 +249,7 @@ CMD ["/app/.output/server/index.mjs"]
         sh """
           trivy image \
             --exit-code 1 \
-            --severity CRITICAL \
+            --severity HIGH,CRITICAL \
             --ignore-unfixed \
             ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
         """
@@ -304,7 +304,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ci-cd-example-config
-  namespace: ${NAME_SPACE}
+  namespace: ptpn-development
 data:
     NUXT_PUBLIC_URL: "https://localhost:3000"
 YAML
@@ -316,7 +316,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ci-cd-example
-  namespace: ${NAME_SPACE}
+  namespace: ptpn-development
   labels:
     app: ci-cd-example
     env: ${BUILD_TYPE}
@@ -357,14 +357,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ci-cd-example
-  namespace: ci-cd-example
+  namespace: ptpn-development
 spec:
   selector:
-    app: %!s(int=3000)
+    app: ci-cd-example
   ports:
   - protocol: TCP
     port: 3000
-    targetPort: %!d(MISSING)
+    targetPort: 3000
   type: ClusterIP
 YAML
               '''
