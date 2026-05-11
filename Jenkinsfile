@@ -17,6 +17,7 @@ pipeline {
     SONAR_CRED            = 'sonarcube'
     SONAR_INSTALLATION    = 'sonar-scanner'
     SONAR_SCANNER_TOOL    = 'sonar-scanner'
+	// TODO: Uncomment these when we have a Slack bot and Telegram group
     SLACK_BOT_WEBHOOK_URL = credentials('SLACK_BOT_WEBHOOK_URL')
     GROUP_TELEGRAM        = credentials('group-telegram')
     BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
@@ -202,9 +203,12 @@ pipeline {
     stage('Unit Test') {
       steps {
         sh '''
-          corepack enable
+          # No "corepack enable" — it symlinks into /usr/bin and fails on non-root agents (EACCES).
+          npm install -g pnpm@9 --prefix "${WORKSPACE}/.pnpm-toolchain"
+          export PATH="${WORKSPACE}/.pnpm-toolchain/bin:${PATH}"
           pnpm install --frozen-lockfile
           pnpm test --passWithNoTests || true
+          rm -rf node_modules || true
         '''
       }
     }
@@ -234,7 +238,18 @@ COPY --from=builder /app/.output ./.output
 EXPOSE 3000
 CMD ["/app/.output/server/index.mjs"]
 '''
-          sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} ."
+          // Frontend: load .env then build (build-args from .env; add ARG lines in Dockerfile as needed)
+          sh """
+            set -e
+            if [ -f .env ]; then
+              export \$(grep -v '^#' .env | xargs) || true
+              docker build \\
+                \$(grep -v '^#' .env | grep -v '^[[:space:]]*$' | sed 's/^/--build-arg /') \\
+                -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} .
+            else
+              docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} .
+            fi
+          """
         }
       }
     }
