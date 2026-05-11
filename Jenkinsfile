@@ -17,18 +17,13 @@ pipeline {
     SONAR_CRED            = 'sonarcube'
     SONAR_INSTALLATION    = 'sonar-scanner'
     SONAR_SCANNER_TOOL    = 'sonar-scanner'
-	// TODO: Uncomment these when we have a Slack bot and Telegram group
-    // SLACK_BOT_WEBHOOK_URL = credentials('SLACK_BOT_WEBHOOK_URL')
-    // GROUP_TELEGRAM        = credentials('group-telegram')
-    // BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
+    SLACK_BOT_WEBHOOK_URL = credentials('SLACK_BOT_WEBHOOK_URL')
+    GROUP_TELEGRAM        = credentials('group-telegram')
+    BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
 
     KUBECONFIG_CRED   = 'kubeconfig-dev-rancher'
     GIT_CRED_ID       = 'ptpn-cred'
     IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/'
-  }
-
-  triggers {
-    githubPush()
   }
 
   options {
