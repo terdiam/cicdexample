@@ -23,7 +23,7 @@ pipeline {
 
     KUBECONFIG_CRED   = 'kubeconfig-dev-rancher'
     GIT_CRED_ID       = 'ptpn-cred'
-    IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/160f73911df2efb06c3edb625a213c08'
+    IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/72428ed839ce0d1df28a1fd1c2c8acc3'
   }
 
   options {
