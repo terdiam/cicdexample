@@ -18,9 +18,9 @@ pipeline {
     SONAR_INSTALLATION    = 'sonar-scanner'
     SONAR_SCANNER_TOOL    = 'sonar-scanner'
 	// TODO: Uncomment these when we have a Slack bot and Telegram group
-    SLACK_BOT_WEBHOOK_URL = credentials('SLACK_BOT_WEBHOOK_URL')
-    GROUP_TELEGRAM        = credentials('group-telegram')
-    BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
+    // SLACK_BOT_WEBHOOK_URL = credentials('SLACK_BOT_WEBHOOK_URL')
+    // GROUP_TELEGRAM        = credentials('group-telegram')
+    // BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
 
     KUBECONFIG_CRED   = 'kubeconfig-dev-rancher'
     GIT_CRED_ID       = 'ptpn-cred'
@@ -239,17 +239,17 @@ EXPOSE 3000
 CMD ["/app/.output/server/index.mjs"]
 '''
           // Frontend: load .env then build (build-args from .env; add ARG lines in Dockerfile as needed)
-          sh """
+          sh '''
             set -e
             if [ -f .env ]; then
-              export \$(grep -v '^#' .env | xargs) || true
-              docker build \\
-                \$(grep -v '^#' .env | grep -v '^[[:space:]]*$' | sed 's/^/--build-arg /') \\
+              export $(grep -v '^#' .env | xargs) || true
+              docker build \
+                $(grep -v '^#' .env | grep -v '^[[:space:]]*$' | sed 's/^/--build-arg /') \
                 -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} .
             else
               docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} .
             fi
-          """
+          '''
         }
       }
     }
