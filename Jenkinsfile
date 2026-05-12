@@ -8,8 +8,8 @@ pipeline {
 
   environment {
     IMAGE_NAME        = 'ci-cd-example'
-    PROJECT_NAME      = 'ptpn'
-    NAME_SPACE        = 'ptpn-development'
+    PROJECT_NAME      = 'ci-cd-example'
+    NAME_SPACE        = 'ci-cd-example-development'
     REGISTRY          = 'quantumteknologi'
 
     REGISTRY_CRED         = 'registry-docker'
@@ -21,9 +21,9 @@ pipeline {
     GROUP_TELEGRAM        = credentials('group-telegram')
     BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
 
-    KUBECONFIG_CRED   = 'kubeconfig-dev-rancher'
-    GIT_CRED_ID       = 'ptpn-cred'
-    IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/28caffdcab559c33ce537e9ebee1442b'
+    KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
+    GIT_CRED_ID       = 'ci-cd-example-cred'
+    IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/bbd1f199c32ba323593c6740cca9e0ad'
   }
 
   options {
@@ -307,25 +307,26 @@ CMD ["/app/.output/server/index.mjs"]
 
             if (!exists) {
               echo "First deploy — creating K8s resources for namespace ${NAME_SPACE}"
+              echo "No ConfigMap variables — skipping"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
-  name: ci-cd-example-config
-  namespace: ptpn-development
+  name: ci-cd-example-secret
+  namespace: ci-cd-example-development
+type: Opaque
 data:
-    NUXT_PUBLIC_URL: "https://localhost:3000"
+    NUXT_PUBLIC_URL: aHR0cDovL2NpLWNkLWV4YW1wbGUucXVhbnR1bS5pbnRlcm5hbA==
 YAML
               '''
-              echo "No Secret variables — skipping"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ci-cd-example
-  namespace: ptpn-development
+  namespace: ci-cd-example-development
   labels:
     app: ci-cd-example
     env: ${BUILD_TYPE}
@@ -349,8 +350,8 @@ spec:
         ports:
         - containerPort: 3000
         envFrom:
-          - configMapRef:
-              name: ci-cd-example-config
+          - secretRef:
+              name: ci-cd-example-secret
         resources:
           requests:
             cpu: "100m"
@@ -366,7 +367,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ci-cd-example
-  namespace: ptpn-development
+  namespace: ci-cd-example-development
 spec:
   selector:
     app: ci-cd-example
@@ -402,7 +403,7 @@ YAML
     stage('DAST OWASP ZAP') {
       steps {
         script {
-          def target = ''
+          def target = 'http://ci-cd-example.quantum.internal'
           if (!target) {
             echo "⚠️  APP_URL not set — skipping DAST scan"
           } else {
