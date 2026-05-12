@@ -17,13 +17,11 @@ pipeline {
     SONAR_CRED            = 'sonarcube'
     SONAR_INSTALLATION    = 'sonar-scanner'
     SONAR_SCANNER_TOOL    = 'sonar-scanner'
-    SLACK_BOT_WEBHOOK_URL = credentials('SLACK_BOT_WEBHOOK_URL')
-    GROUP_TELEGRAM        = credentials('group-telegram')
-    BOT_TOKEN             = credentials('TELEGRAM_BOT_TOKEN')
+
+
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
     GIT_CRED_ID       = 'ci-cd-example-cred'
-    // IDP_WEBHOOK_URL: add Jenkins credential kind "Secret text", ID "idp-webhook-ci-cd-example-development", value = full webhook URL from IDP pipeline (unique per project/env).
     IDP_WEBHOOK_URL   = credentials('idp-webhook-ci-cd-example-development')
   }
 
@@ -432,10 +430,22 @@ YAML
 
   post {
     success {
-      sendTelegram("✅ *DEPLOY SUCCESS*\nProject: ${env.PROJECT_NAME}\nEnv: ${env.BUILD_TYPE}\nTag: ${env.IMAGE_VERSION}")
+      script {
+
+
+
+        echo 'Build succeeded — no Telegram/Slack notifications configured in IDP wizard.'
+
+      }
     }
     failure {
-      sendTelegram("❌ *DEPLOY FAILED*\nProject: ${env.PROJECT_NAME}\nEnv: ${env.BUILD_TYPE}\nTag: ${env.IMAGE_VERSION}")
+      script {
+
+
+
+        echo 'Build failed — no Telegram/Slack notifications configured in IDP wizard.'
+
+      }
     }
     always {
       script {
@@ -472,23 +482,4 @@ YAML
   }
 }
 
-/* =============================
- * Notification Helpers
- * ============================= */
-def sendTelegram(String message) {
-  sh """
-    curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage \
-      -d chat_id=${GROUP_TELEGRAM} \
-      -d text="${message}" \
-      -d parse_mode=Markdown
-  """
-}
 
-def sendSlack(String status, String project, String branch, String tag, String type) {
-  def payload = """{"text": "*${status}*\\n📦 Project: ${project}\\n🌿 Branch: ${branch}\\n🏷 Tag: ${tag}\\n🚀 Env: ${type}"}"""
-  sh """
-    curl -X POST ${SLACK_BOT_WEBHOOK_URL} \
-      -H 'Content-Type: application/json' \
-      -d '${payload}'
-  """
-}
