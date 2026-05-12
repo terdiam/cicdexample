@@ -23,7 +23,8 @@ pipeline {
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
     GIT_CRED_ID       = 'ci-cd-example-cred'
-    IDP_WEBHOOK_URL   = 'http://0.0.0.0:8080/api/v1/cicd/webhook/bbd1f199c32ba323593c6740cca9e0ad'
+    // IDP_WEBHOOK_URL: add Jenkins credential kind "Secret text", ID "idp-webhook-ci-cd-example-development", value = full webhook URL from IDP pipeline (unique per project/env).
+    IDP_WEBHOOK_URL   = credentials('idp-webhook-ci-cd-example-development')
   }
 
   options {
@@ -403,7 +404,7 @@ YAML
     stage('DAST OWASP ZAP') {
       steps {
         script {
-          def target = 'http://ci-cd-example.quantum.internal'
+          def target = ''
           if (!target) {
             echo "⚠️  APP_URL not set — skipping DAST scan"
           } else {
@@ -447,7 +448,7 @@ YAML
         def sha = COMMIT_SHA ?: ''
 
         sh """
-          curl -s -X POST '${IDP_WEBHOOK_URL}' \\
+          curl -s -X POST '${env.IDP_WEBHOOK_URL}' \\
             -H 'Content-Type: application/json' \\
             -d '{
               "branch":          "${BRANCH_NAME}",
