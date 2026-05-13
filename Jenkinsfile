@@ -8,8 +8,8 @@ pipeline {
 
   environment {
     IMAGE_NAME        = 'ci-cd-example'
-    PROJECT_NAME      = 'test-project'
-    NAME_SPACE        = 'test-project-development'
+    PROJECT_NAME      = 'cicdexample'
+    NAME_SPACE        = 'cicdexample-development'
     REGISTRY          = 'quantumteknologi'
 
     REGISTRY_CRED         = 'registry-docker'
@@ -21,8 +21,8 @@ pipeline {
 
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
-    GIT_CRED_ID       = 'test-project-cred'
-    IDP_WEBHOOK_URL   = credentials('idp-webhook-test-project-development')
+    GIT_CRED_ID       = 'cicdexample-cred'
+    IDP_WEBHOOK_URL   = credentials('idp-webhook-cicdexample-development')
   }
 
   options {
@@ -313,12 +313,12 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: ci-cd-example-secret
-  namespace: test-project-development
+  namespace: cicdexample-development
 type: Opaque
 data:
-    DB_HOST: MTkyLjE2OC4xNjYuNzE=
     DB_PASS: dGVzdGluZzEyMw==
-    NUXT_PUBLIC_URL: aHR0cHM6Ly9jaS1jZC1leGFtcGxlLnF1YW50dW10ZWtub2xvZ2kuY29t
+    DB_USER: cG9zdGdyZXM=
+    NUXT_PUBLIC_URL: aHR0cDovL2NpY2RleGFtcGxlLmNvbQ==
 YAML
               '''
               sh '''
@@ -327,7 +327,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ci-cd-example
-  namespace: test-project-development
+  namespace: cicdexample-development
   labels:
     app: ci-cd-example
     env: ${BUILD_TYPE}
@@ -368,7 +368,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ci-cd-example
-  namespace: test-project-development
+  namespace: cicdexample-development
 spec:
   selector:
     app: ci-cd-example
