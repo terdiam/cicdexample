@@ -9,7 +9,7 @@ pipeline {
   environment {
     IMAGE_NAME        = 'ci-cd-example'
     PROJECT_NAME      = 'test-ci-cd'
-    NAME_SPACE        = 'test-ci-cd-staging'
+    NAME_SPACE        = 'test-ci-cd-development'
     REGISTRY          = 'quantumteknologi'
 
     REGISTRY_CRED         = 'registry-docker'
@@ -22,7 +22,7 @@ pipeline {
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
     GIT_CRED_ID       = 'test-ci-cd-cred'
-    IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-staging')
+    IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-development')
 	NVD_API_KEY       = credentials('nvd-api-key')
   }
 
@@ -322,14 +322,27 @@ CMD ["/app/.output/server/index.mjs"]
             if (!exists) {
               echo "First deploy — creating K8s resources for namespace ${NAME_SPACE}"
               echo "No ConfigMap variables — skipping"
-              echo "No Secret variables — skipping"
+              sh '''
+                kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ci-cd-example-secret
+  namespace: test-ci-cd-development
+type: Opaque
+data:
+    DB_PASS: cGFzcw==
+    DB_USER: dXNlcg==
+    NUXT_PUBLIC_URL: aHR0cDovL2NpLWNkLWV4YW1wbGUuY29t
+YAML
+              '''
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ci-cd-example
-  namespace: test-ci-cd-staging
+  namespace: test-ci-cd-development
   labels:
     app: ci-cd-example
     env: ${BUILD_TYPE}
@@ -352,7 +365,9 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
-
+        envFrom:
+          - secretRef:
+              name: ci-cd-example-secret
         resources:
           requests:
             cpu: "100m"
@@ -368,7 +383,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ci-cd-example
-  namespace: test-ci-cd-staging
+  namespace: test-ci-cd-development
 spec:
   selector:
     app: ci-cd-example
