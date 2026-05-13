@@ -39,7 +39,21 @@ pipeline {
     stage('Checkout') {
       steps {
         script {
-          checkout scm
+          // Apply GIT_CRED_ID explicitly so HTTPS fetch uses the same credential on every agent.
+          // (checkout scm alone relies on the branch source; agents sometimes omit or differ → GitHub "Repository not found".)
+          checkout([
+            $class: 'GitSCM',
+            branches: scm.branches,
+            extensions: scm.extensions,
+            userRemoteConfigs: scm.userRemoteConfigs.collect { urc ->
+              [
+                name: urc.name,
+                refspec: urc.refspec,
+                url: urc.url,
+                credentialsId: env.GIT_CRED_ID
+              ]
+            }
+          ])
           // Multibranch checkout often omits tags; IDP creates tags on GitHub — fetch them first.
           sh 'git fetch --tags origin 2>/dev/null || git fetch --tags 2>/dev/null || true'
 
