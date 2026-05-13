@@ -23,6 +23,7 @@ pipeline {
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
     GIT_CRED_ID       = 'cicdexample-cred'
     IDP_WEBHOOK_URL   = credentials('idp-webhook-cicdexample-development')
+	NVD_API_KEY       = credentials('nvd-api-key')
   }
 
   options {
@@ -183,7 +184,7 @@ pipeline {
      * ============================= */
     stage('OWASP Scan') {
       steps {
-        dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'dp'
+        dependencyCheck additionalArguments: """--nvdApiKey ${NVD_API_KEY} --scan ./""", odcInstallation: 'dp'
         dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
       }
     }
