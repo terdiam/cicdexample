@@ -319,8 +319,7 @@ CMD ["/app/.output/server/index.mjs"]
               returnStdout: true
             ).trim()
 
-            if (!exists) {
-              echo "First deploy — creating K8s resources for namespace ${NAME_SPACE}"
+            echo "Applying ConfigMap / Secret / Deployment (env vars split per key)"
               echo "No ConfigMap variables — skipping"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
@@ -377,6 +376,9 @@ spec:
             memory: "512Mi"
 YAML
               '''
+
+            if (!exists) {
+              echo "First deploy — creating Service for namespace ${NAME_SPACE}"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: v1
@@ -395,13 +397,17 @@ spec:
 YAML
               '''
             } else {
-              echo "Updating existing deployment — rolling image update"
+              echo "Updating deployment image"
               sh '''
                 kubectl set image deployment/${IMAGE_NAME} \
                   ${IMAGE_NAME}=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION} \
                   -n ${NAME_SPACE} --kubeconfig=$KUBECONFIG
               '''
             }
+
+            sh '''
+              kubectl rollout restart deployment/${IMAGE_NAME} -n ${NAME_SPACE} --kubeconfig=$KUBECONFIG
+            '''
 
             sh '''
               kubectl rollout status deployment/${IMAGE_NAME} -n ${NAME_SPACE} \
