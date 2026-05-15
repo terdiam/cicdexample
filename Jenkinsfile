@@ -322,6 +322,7 @@ CMD ["/app/.output/server/index.mjs"]
             echo "Applying ConfigMap / Secret / Deployment (env vars split per key from env credential)"
             withCredentials([file(credentialsId: 'env-development', variable: 'IDP_ENV_FILE')]) {
               sh '''
+#!/bin/bash
 set -euo pipefail
 
 is_secret_key() {
