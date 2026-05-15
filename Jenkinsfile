@@ -320,7 +320,18 @@ CMD ["/app/.output/server/index.mjs"]
             ).trim()
 
             echo "Applying ConfigMap / Secret / Deployment (classified at IDP Generate Jenkinsfile)"
-              echo "No ConfigMap variables — skipping"
+              sh '''
+                kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ci-cd-example-config
+  namespace: test-ci-cd-development
+data:
+    NUXT_PUBLIC_URL: "https://ci-cd-example.com"
+    POSTGRES_HOST: "localhost"
+YAML
+              '''
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
 apiVersion: v1
@@ -330,12 +341,10 @@ metadata:
   namespace: test-ci-cd-development
 type: Opaque
 data:
-    NUXT_PUBLIC_URL: aHR0cHM6Ly9jaS1jZC1leGFtcGxlLmNvbQ==
-    POSTGRES_HOST: bG9jYWxob3N0
-    REDIS_PASSWORD: cmVkaXNwYXM=
     TURNSTILE_SECRET_KEY: ODI5Mzkz
     DB_PASS: cGFzc3dvcmQ=
     DB_USER: dXNlcg==
+    REDIS_PASSWORD: cmVkaXNwYXM=
 YAML
               '''
               sh '''
@@ -368,6 +377,8 @@ spec:
         ports:
         - containerPort: 3000
         envFrom:
+          - configMapRef:
+              name: ci-cd-example-config
           - secretRef:
               name: ci-cd-example-secret
         resources:
