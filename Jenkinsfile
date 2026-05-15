@@ -21,6 +21,7 @@ pipeline {
 
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
+    ENV_CRED_ID       = 'env-test-ci-cd-development'
     GIT_CRED_ID       = 'test-ci-cd-cred'
     IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-development')
 	NVD_API_KEY       = credentials('nvd-api-key')
@@ -116,13 +117,12 @@ pipeline {
     stage('Inject Environment') {
       steps {
         script {
-          def envCredID = "env-${BUILD_TYPE}"
           try {
-            withCredentials([file(credentialsId: envCredID, variable: 'ENV_FILE')]) {
+            withCredentials([file(credentialsId: env.ENV_CRED_ID, variable: 'ENV_FILE')]) {
               sh 'cp $ENV_FILE .env'
             }
           } catch (e) {
-            echo "⚠️  No credential '${envCredID}' found — skipping .env injection"
+            echo "⚠️  No credential '${env.ENV_CRED_ID}' found — skipping .env injection"
           }
         }
       }
@@ -319,7 +319,7 @@ CMD ["/app/.output/server/index.mjs"]
               returnStdout: true
             ).trim()
 
-            echo "Applying ConfigMap / Secret / Deployment (sensitive keys → Secret, others → ConfigMap; .env credential unchanged for Docker build)"
+            echo "Applying ConfigMap / Secret / Deployment (classified at IDP Generate Jenkinsfile)"
               echo "No ConfigMap variables — skipping"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
@@ -330,12 +330,12 @@ metadata:
   namespace: test-ci-cd-development
 type: Opaque
 data:
-    TURNSTILE_SECRET_KEY: ODI5Mzkz
-    DB_PASS: cGFzc3dvcmQ=
-    DB_USER: dXNlcg==
     NUXT_PUBLIC_URL: aHR0cHM6Ly9jaS1jZC1leGFtcGxlLmNvbQ==
     POSTGRES_HOST: bG9jYWxob3N0
     REDIS_PASSWORD: cmVkaXNwYXM=
+    TURNSTILE_SECRET_KEY: ODI5Mzkz
+    DB_PASS: cGFzc3dvcmQ=
+    DB_USER: dXNlcg==
 YAML
               '''
               sh '''
