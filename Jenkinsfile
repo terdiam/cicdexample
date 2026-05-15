@@ -319,10 +319,67 @@ CMD ["/app/.output/server/index.mjs"]
               returnStdout: true
             ).trim()
 
-            echo "Applying ConfigMap / Secret / Deployment (env vars split per key)"
-              echo "No ConfigMap variables — skipping"
+            echo "Applying ConfigMap / Secret / Deployment (env vars split per key from env credential)"
+            withCredentials([file(credentialsId: 'env-development', variable: 'IDP_ENV_FILE')]) {
               sh '''
-                kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
+set -euo pipefail
+
+is_secret_key() {
+  local key="$1"
+  local lower
+  lower=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [ -z "$lower" ] && return 1
+  case "$lower" in
+    *username*|*password*|*passwd*|*secret*|*hash*|*token*|*credential*|*private*|*certificate*|*cert*)
+      return 0 ;;
+  esac
+  case "$lower" in
+    *_key|key_*|*apikey*|*secretkey*|*accesskey*)
+      return 0 ;;
+  esac
+  case "$lower" in
+    *_user|*_user_*|*_pass|*_pass_*|*_pwd|*_pwd_*)
+      return 0 ;;
+  esac
+  return 1
+}
+
+CM_DATA=""
+SECRET_DATA=""
+while IFS= read -r line || [ -n "$line" ]; do
+  line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [ -z "$line" ] || case "$line" in \\#*) continue ;; esac
+  key="${line%=*}"
+  val="${line#*=}"
+  key=$(printf '%s' "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [ -z "$key" ] && continue
+  if is_secret_key "$key"; then
+    b64=$(printf '%s' "$val" | base64 | tr -d '\\n')
+    SECRET_DATA="${SECRET_DATA}    ${key}: ${b64}
+"
+  else
+    esc=$(printf '%s' "$val" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g')
+    CM_DATA="${CM_DATA}    ${key}: \\"${esc}\\"
+"
+  fi
+done < "$IDP_ENV_FILE"
+
+if [ -n "$CM_DATA" ]; then
+  kubectl apply -f - --kubeconfig=$KUBECONFIG <<CMYAML
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ci-cd-example-config
+  namespace: test-ci-cd-development
+data:
+${CM_DATA}
+CMYAML
+else
+  echo "No ConfigMap variables in env file — skipping ConfigMap"
+fi
+
+if [ -n "$SECRET_DATA" ]; then
+  kubectl apply -f - --kubeconfig=$KUBECONFIG <<SECYAML
 apiVersion: v1
 kind: Secret
 metadata:
@@ -330,11 +387,13 @@ metadata:
   namespace: test-ci-cd-development
 type: Opaque
 data:
-    DB_PASS: cGFzcw==
-    DB_USER: dXNlcg==
-    NUXT_PUBLIC_URL: aHR0cDovL2NpLWNkLWV4YW1wbGUuY29t
-YAML
-              '''
+${SECRET_DATA}
+SECYAML
+else
+  echo "No Secret variables in env file — skipping Secret"
+fi
+'''
+            }
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: apps/v1
