@@ -22,6 +22,7 @@ pipeline {
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
     ENV_CRED_ID       = 'env-test-ci-cd-development'
+    K8S_CRED_PREFIX   = 'test-ci-cd'
     GIT_CRED_ID       = 'test-ci-cd-cred'
     IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-development')
 	NVD_API_KEY       = credentials('nvd-api-key')
@@ -320,33 +321,24 @@ CMD ["/app/.output/server/index.mjs"]
             ).trim()
 
             echo "Applying ConfigMap / Secret / Deployment (classified at IDP Generate Jenkinsfile)"
-              sh '''
-                kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ci-cd-example-config
-  namespace: test-ci-cd-development
-data:
-    NUXT_PUBLIC_URL: "https://ci-cd-example.com"
-    POSTGRES_HOST: "localhost"
-YAML
-              '''
-              sh '''
-                kubectl apply -f - --kubeconfig=$KUBECONFIG <<'YAML'
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ci-cd-example-secret
-  namespace: test-ci-cd-development
-type: Opaque
-data:
-    TURNSTILE_SECRET_KEY: ODI5Mzkz
-    DB_PASS: cGFzc3dvcmQ=
-    DB_USER: dXNlcg==
-    REDIS_PASSWORD: cmVkaXNwYXM=
-YAML
-              '''
+              try {
+                def cmCred = "configmap-${env.K8S_CRED_PREFIX}-${env.BUILD_TYPE}"
+                echo "Applying ConfigMap from Jenkins credential: ${cmCred}"
+                withCredentials([file(credentialsId: cmCred, variable: 'K8S_CM_MANIFEST')]) {
+                  sh 'kubectl apply -f "$K8S_CM_MANIFEST" --kubeconfig="$KUBECONFIG"'
+                }
+              } catch (Exception e) {
+                echo "⚠️  ConfigMap apply skipped (credential missing or invalid): ${e.getMessage()}"
+              }
+              try {
+                def secCred = "secret-${env.K8S_CRED_PREFIX}-${env.BUILD_TYPE}"
+                echo "Applying Secret from Jenkins credential: ${secCred}"
+                withCredentials([file(credentialsId: secCred, variable: 'K8S_SECRET_MANIFEST')]) {
+                  sh 'kubectl apply -f "$K8S_SECRET_MANIFEST" --kubeconfig="$KUBECONFIG"'
+                }
+              } catch (Exception e) {
+                echo "⚠️  Secret apply skipped (credential missing or invalid): ${e.getMessage()}"
+              }
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: apps/v1
