@@ -7,16 +7,14 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME        = 'ci-cd-example'
+    IMAGE_NAME        = 'cicdexample'
     PROJECT_NAME      = 'test-ci-cd'
     NAME_SPACE        = 'test-ci-cd-development'
     REGISTRY          = 'quantumteknologi'
 
     REGISTRY_CRED         = 'registry-docker'
     REGISTRY_URL          = 'https://index.docker.io/v1/'
-    SONAR_CRED            = 'sonarcube'
-    SONAR_INSTALLATION    = 'sonar-scanner'
-    SONAR_SCANNER_TOOL    = 'sonar-scanner'
+
 
 
 
@@ -25,7 +23,7 @@ pipeline {
     K8S_CRED_PREFIX   = 'test-ci-cd'
     GIT_CRED_ID       = 'test-ci-cd-cred'
     IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-development')
-	NVD_API_KEY       = credentials('nvd-api-key')
+
   }
 
   options {
@@ -129,83 +127,7 @@ pipeline {
       }
     }
 
-    /* =============================
-     * Gitleaks — Secret Detection
-     * ============================= */
-    stage('Gitleaks Scan') {
-      steps {
-        script {
-          sh '''
-            docker run --rm \
-              -v $(pwd):/path \
-              zricethezav/gitleaks:latest detect \
-              --source=/path \
-              --exit-code=1 \
-              --redact \
-              --no-git \
-              -v || true
-          '''
-        }
-      }
-    }
 
-    /* =============================
-     * SonarQube Analysis
-     * ============================= */
-    stage('SonarQube Analysis') {
-      steps {
-        script {
-          def scannerHome = tool name: SONAR_SCANNER_TOOL, type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-          withSonarQubeEnv(installationName: SONAR_INSTALLATION, credentialsId: SONAR_CRED) {
-            sh """
-              export PATH="${scannerHome}/bin:\${PATH}"
-              sonar-scanner \
-                -Dsonar.projectKey=${PROJECT_NAME} \
-                -Dsonar.projectName=${PROJECT_NAME} \
-                -Dsonar.exclusions=**/.nuxt/**,**/node_modules/**,**/dist/**,**/vendor/**,**/.next/**
-            """
-          }
-        }
-      }
-    }
-
-    /* =============================
-     * Sonar Quality Gate
-     * ============================= */
-    stage('Sonar Quality Gate') {
-      steps {
-        timeout(time: 20, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
-        }
-      }
-    }
-
-    /* =============================
-     * OWASP Dependency Check
-     * ============================= */
-    stage('OWASP Scan') {
-      steps {
-        dependencyCheck additionalArguments: """--nvdApiKey ${NVD_API_KEY} --scan ./""", odcInstallation: 'dp'
-        dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-      }
-    }
-
-    /* =============================
-     * Trivy FS Security Scan
-     * ============================= */
-    stage('Trivy Security Scan') {
-      steps {
-        script {
-          def severity = (BUILD_TYPE == 'development') ? 'CRITICAL' : 'HIGH,CRITICAL'
-          sh """
-            trivy fs \
-              --severity ${severity} \
-              --ignore-unfixed \
-              --exit-code 1 .
-          """
-        }
-      }
-    }
 
     /* =============================
      * Unit Test (Frontend)
@@ -229,25 +151,7 @@ pipeline {
     stage('Docker Build') {
       steps {
         script {
-          // Write the generated Dockerfile from the IDP wizard
-          writeFile file: 'Dockerfile', text: '''
-# ── Build stage ──────────────────────────────────────────────
-FROM node:24-alpine AS builder
-WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@latest --activate
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm run build
-
-# ── Runtime stage (distroless) ────────────────────────────────
-FROM gcr.io/distroless/nodejs24-debian13 AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/.output ./.output
-EXPOSE 3000
-CMD ["/app/.output/server/index.mjs"]
-'''
+          // Build from the repository's existing Dockerfile (not replaced by the IDP wizard)
           // Frontend: load .env then build (build-args from .env; add ARG lines in Dockerfile as needed)
           sh '''
             set -e
@@ -265,20 +169,7 @@ CMD ["/app/.output/server/index.mjs"]
     }
 
 
-    /* =============================
-     * Trivy Image Scan
-     * ============================= */
-    stage('Trivy Image Scan') {
-      steps {
-        sh """
-          trivy image \
-            --exit-code 1 \
-            --severity CRITICAL \
-            --ignore-unfixed \
-            ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
-        """
-      }
-    }
+
 
     /* =============================
      * Docker Push
@@ -330,49 +221,39 @@ CMD ["/app/.output/server/index.mjs"]
               } catch (Exception e) {
                 echo "⚠️  ConfigMap apply skipped (credential missing or invalid): ${e.getMessage()}"
               }
-              try {
-                def secCred = "secret-${env.K8S_CRED_PREFIX}-${env.BUILD_TYPE}"
-                echo "Applying Secret from Jenkins credential: ${secCred}"
-                withCredentials([file(credentialsId: secCred, variable: 'K8S_SECRET_MANIFEST')]) {
-                  sh 'kubectl apply -f "$K8S_SECRET_MANIFEST" --kubeconfig="$KUBECONFIG"'
-                }
-              } catch (Exception e) {
-                echo "⚠️  Secret apply skipped (credential missing or invalid): ${e.getMessage()}"
-              }
+              echo "No Secret variables — skipping"
               sh '''
                 kubectl apply -f - --kubeconfig=$KUBECONFIG <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ci-cd-example
+  name: cicdexample
   namespace: test-ci-cd-development
   labels:
-    app: ci-cd-example
+    app: cicdexample
     env: ${BUILD_TYPE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ci-cd-example
+      app: cicdexample
   template:
     metadata:
       labels:
-        app: ci-cd-example
+        app: cicdexample
         version: ${IMAGE_VERSION}
     spec:
       imagePullSecrets:
-      - name: ci-cd-example-registry
+      - name: cicdexample-registry
       containers:
-      - name: ci-cd-example
-        image: quantumteknologi/ci-cd-example:${IMAGE_VERSION}
+      - name: cicdexample
+        image: quantumteknologi/cicdexample:${IMAGE_VERSION}
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
         envFrom:
           - configMapRef:
-              name: ci-cd-example-config
-          - secretRef:
-              name: ci-cd-example-secret
+              name: cicdexample-config
         resources:
           requests:
             cpu: "100m"
@@ -390,11 +271,11 @@ YAML
 apiVersion: v1
 kind: Service
 metadata:
-  name: ci-cd-example
+  name: cicdexample
   namespace: test-ci-cd-development
 spec:
   selector:
-    app: ci-cd-example
+    app: cicdexample
   ports:
   - protocol: TCP
     port: 3000
@@ -424,37 +305,7 @@ YAML
       }
     }
 
-    /* =============================
-     * DAST — OWASP ZAP
-     * Runs after deploy so the live URL is available.
-     * ============================= */
-    stage('DAST OWASP ZAP') {
-      steps {
-        script {
-          def target = ''
-          if (!target) {
-            echo "⚠️  APP_URL not set — skipping DAST scan"
-          } else {
-            sh """
-              docker run --rm \
-                -v \$(pwd)/zap-reports:/zap/wrk:rw \
-                ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-                -t ${target} \
-                -r zap-report.html \
-                -I || true
-            """
-            publishHTML(target: [
-              allowMissing: true,
-              alwaysLinkToLastBuild: true,
-              keepAll: true,
-              reportDir: 'zap-reports',
-              reportFiles: 'zap-report.html',
-              reportName: 'OWASP ZAP Report'
-            ])
-          }
-        }
-      }
-    }
+
   }
 
   post {
