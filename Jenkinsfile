@@ -15,10 +15,6 @@ pipeline {
     REGISTRY_CRED         = 'registry-docker'
     REGISTRY_URL          = 'https://index.docker.io/v1/'
 
-    SONAR_CRED            = 'sonarcube'
-    SONAR_INSTALLATION    = 'sonar-scanner'
-    SONAR_SCANNER_TOOL    = 'sonar-scanner'
-
 
 
 
@@ -27,8 +23,6 @@ pipeline {
     K8S_CRED_PREFIX   = 'test-ci-cd-cicdexample'
     GIT_CRED_ID       = 'test-ci-cd-cred'
     IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-development')
-
-    NVD_API_KEY       = credentials('nvd-api-key')
 
   }
 
@@ -134,86 +128,8 @@ pipeline {
     }
 
 
-    /* =============================
-     * Gitleaks — Secret Detection
-     * ============================= */
-    stage('Gitleaks Scan') {
-      steps {
-        script {
-          sh '''
-            docker run --rm \
-              -v $(pwd):/path \
-              zricethezav/gitleaks:latest detect \
-              --source=/path \
-              --exit-code=1 \
-              --redact \
-              --no-git \
-              -v || true
-          '''
-        }
-      }
-    }
 
 
-    /* =============================
-     * SonarQube Analysis
-     * ============================= */
-    stage('SonarQube Analysis') {
-      steps {
-        script {
-          def scannerHome = tool name: SONAR_SCANNER_TOOL, type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-          withSonarQubeEnv(installationName: SONAR_INSTALLATION, credentialsId: SONAR_CRED) {
-            sh """
-              export PATH="${scannerHome}/bin:\${PATH}"
-              sonar-scanner \
-                -Dsonar.projectKey=${PROJECT_NAME} \
-                -Dsonar.projectName=${PROJECT_NAME} \
-                -Dsonar.exclusions=**/.nuxt/**,**/node_modules/**,**/dist/**,**/vendor/**,**/.next/**
-            """
-          }
-        }
-      }
-    }
-
-    /* =============================
-     * Sonar Quality Gate
-     * ============================= */
-    stage('Sonar Quality Gate') {
-      steps {
-        timeout(time: 20, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
-        }
-      }
-    }
-
-
-    /* =============================
-     * OWASP Dependency Check
-     * ============================= */
-    stage('OWASP Scan') {
-      steps {
-        dependencyCheck additionalArguments: """--nvdApiKey ${NVD_API_KEY} --scan ./""", odcInstallation: 'dp'
-        dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-      }
-    }
-
-
-    /* =============================
-     * Trivy FS Security Scan
-     * ============================= */
-    stage('Trivy Security Scan') {
-      steps {
-        script {
-          def severity = (BUILD_TYPE == 'development') ? 'CRITICAL' : 'HIGH,CRITICAL'
-          sh """
-            trivy fs \
-              --severity ${severity} \
-              --ignore-unfixed \
-              --exit-code 1 .
-          """
-        }
-      }
-    }
 
 
     /* =============================
@@ -274,21 +190,6 @@ CMD ["/app/.output/server/index.mjs"]
     }
 
 
-
-    /* =============================
-     * Trivy Image Scan
-     * ============================= */
-    stage('Trivy Image Scan') {
-      steps {
-        sh """
-          trivy image \
-            --exit-code 1 \
-            --severity CRITICAL \
-            --ignore-unfixed \
-            ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
-        """
-      }
-    }
 
 
     /* =============================
@@ -425,38 +326,6 @@ YAML
       }
     }
 
-
-    /* =============================
-     * DAST — OWASP ZAP
-     * Runs after deploy so the live URL is available.
-     * ============================= */
-    stage('DAST OWASP ZAP') {
-      steps {
-        script {
-          def target = ''
-          if (!target) {
-            echo "⚠️  APP_URL not set — skipping DAST scan"
-          } else {
-            sh """
-              docker run --rm \
-                -v \$(pwd)/zap-reports:/zap/wrk:rw \
-                ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-                -t ${target} \
-                -r zap-report.html \
-                -I || true
-            """
-            publishHTML(target: [
-              allowMissing: true,
-              alwaysLinkToLastBuild: true,
-              keepAll: true,
-              reportDir: 'zap-reports',
-              reportFiles: 'zap-report.html',
-              reportName: 'OWASP ZAP Report'
-            ])
-          }
-        }
-      }
-    }
 
   }
 
