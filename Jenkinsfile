@@ -23,8 +23,8 @@ pipeline {
 
 
     KUBECONFIG_CRED   = 'kubeconfig-kubernet-matrix'
-    ENV_CRED_ID       = 'env-test-ci-cd-development'
-    K8S_CRED_PREFIX   = 'test-ci-cd'
+    ENV_CRED_ID       = 'env-test-ci-cd-cicdexample-development'
+    K8S_CRED_PREFIX   = 'test-ci-cd-cicdexample'
     GIT_CRED_ID       = 'test-ci-cd-cred'
     IDP_WEBHOOK_URL   = credentials('idp-webhook-test-ci-cd-development')
 
@@ -238,7 +238,25 @@ pipeline {
     stage('Docker Build') {
       steps {
         script {
-          // Build from the repository's existing Dockerfile (not replaced by the IDP wizard)
+          // Write the generated Dockerfile from the IDP wizard
+          writeFile file: 'Dockerfile', text: '''
+# ── Build stage ──────────────────────────────────────────────
+FROM node:24-alpine AS builder
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@latest --activate
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm run build
+
+# ── Runtime stage (distroless) ────────────────────────────────
+FROM gcr.io/distroless/nodejs24-debian13 AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/.output ./.output
+EXPOSE 3000
+CMD ["/app/.output/server/index.mjs"]
+'''
           // Frontend: load .env then build (build-args from .env; add ARG lines in Dockerfile as needed)
           sh '''
             set -e
